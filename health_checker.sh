@@ -9,7 +9,8 @@
 # Initiall Built 05/22/2024
 # v0.0.1 - Initial Devleopment
 #################################
-
+macOSversion1=14.5
+macOSversion2=13.6.7
 scriptLog="${4:-"/var/log/health_checker.log"}" # Parameter 4: Script Log Location (i.e., Your organization's default location for client-side logs)
 logo="${5:-""}" # Parameter 5: logo Location
 ###################################################################################################
@@ -123,15 +124,55 @@ currentLoggedInUser
 ####### Battery Status 
 battery_condition=$(system_profiler SPPowerDataType | sed -n -e 's/^.*Condition: //p')
 updateScriptLog "Battery health: $battery_condition"
+if [ "${battery_condition}" != "Normal" ]; then
+	batteryStatusIcon="error"
+	updateScriptLog "Battery Condition is not Normal, may require attention"
+else
+	batteryStatusIcon="success"
+	updateScriptLog "Battery Condition is Normal"
+fi
 battery_cycle=$(system_profiler SPPowerDataType | sed -n -e 's/^.*Cycle Count: //p')
 updateScriptLog "Battery Cycle Count: $battery_cycle"
+if [[ $battery_cycle -gt 999 ]]; then
+	battery_cycle_icon="error"
+else
+	battery_cycle_icon="success"
+fi
+
 
 ####### Get last Jamf Pro check-in time from jamf.log
 last_check_in_time=$(grep "Checking for policies triggered by \"recurring check-in\"" "/private/var/log/jamf.log" | tail -n 1 | awk '{ print $2,$3,$4 }')
-updateScriptLog "Last Jamf Checkin Time: $last_check_in_time"
+# Reformat the date to mm/dd/yyyy
+# Convert month name to a numeric month
+month=$(date -jf "%b" "$(echo $last_check_in_time | awk '{print $1}')" "+%m")
+# Extract day and year
+day=$(echo $last_check_in_time | awk '{print $2}')
+
+	
+# Format the date to mm/dd
+checkin_formatted_date="${month}/${day}"
+
+updateScriptLog "Formatted date: ${checkin_formatted_date}"
+updateScriptLog "Last Jamf Checkin Time: $checkin_formatted_date"
+
+# Calculate the difference in days
+days_diff=$(( seconds_diff / 86400 ))  # 86400 seconds in a day (24 * 60 * 60)
+updateScriptLog "The last Jamf check in was ${days_diff} days ago."
+if [[ $days_diff -gt 7 ]]; then
+	jamf_checkin_icon="error"
+else
+	jamf_checkin_icon="success"
+fi
+#
+#
+####### Get Current OS Version
 sw_vers=$(sw_vers | grep "ProductVersion" | awk '{print $2}')
 updateScriptLog "Current macOS Version: $sw_vers"
-
+if [ $sw_vers != $macOSversion1 ] && [ $sw_vers != $macOSversion2 ]; then
+	macOS_version_icon="error"
+else
+	macOS_version_icon="success"
+fi
 
 ####### Available Updates	
 # Run software update and store the result
@@ -140,26 +181,38 @@ updateScriptLog "Current macOS Version: $sw_vers"
 # Check if any updates are available
 	if [[ $updates == *"No new software available"* ]]; then
 		updateStatus="No macOS Updates Available."
-		updateScriptLog  "No macOs updates available"
+		updateScriptLog  "No macOs updates available."
 	else
 		updateScriptLog "macOS Updates are available"
-		updateStatus="macOS Updates are available"
+		updateStatus="macOS Updates are available."
 		updateScriptLog "$updates"
 	fi
 
 ####### Storage usage
 	
 # Extract total storage from the result and remove the characters 'Gi'
-total_storage=$(system_profiler SPStorageDataType -detaillevel mini | grep "Macintosh HD - Data:" -C 17 | sed -n 6p | awk '{print $2, $3}')
-updateScriptLog "Total Storage Used is $total_storage_readable GB"
+total_storage=$(system_profiler SPStorageDataType -detaillevel mini | grep "Macintosh HD - Data:" -C 17 | sed -n 6p | awk '{print $2}')
+updateScriptLog "Total Storage Used is $total_storage"
 # Extract available storage from the result and remove the characters 'Gi'
-available_storage=$(system_profiler SPStorageDataType -detaillevel mini | grep "Macintosh HD - Data:" -C 17 | sed -n 5p | awk '{print $2, $3}')
+available_storage=$(system_profiler SPStorageDataType -detaillevel mini | grep "Macintosh HD - Data:" -C 17 | sed -n 5p | awk '{print $2}')
 updateScriptLog "Total Available Storage is $available_storage"
 
+if (( $(bc <<<"$available_storage > 50.00") )); then 
+	storage_status_icon="success"
+	updateScriptLog "Sufficient Storage found. $available_storage GB are available. Above the 50GB threshold"
+else
+	storage_status_icon="error"
+	updateScriptLog "Insufficient Storage found. $available_storage GB are available. Below the 50GB threshold"
+fi
 
 ####### Drive SMART information
 smartStatus=$(system_profiler SPStorageDataType -detaillevel mini | grep "Macintosh HD - Data:" -C 17 | sed -n 20p | awk '{print $3}')
-	
+updateScriptLog "SMART Status: $smartStatus"
+if [[ $smartStatus != "Verified" ]]; then
+	smart_status_icon="error"
+else
+	smart_status_icon="success"
+fi
 ####### Network information
 ipAddress="$(ipconfig getifaddr $(networksetup -listallhardwareports | awk '/Hardware Port: Wi-Fi/{getline; print $2}'))"
 updateScriptLog "Current IP Address: $ipAddress"
@@ -168,9 +221,21 @@ updateScriptLog "Current IP Address: $ipAddress"
 
 ####### Last Reboot
 boottime=$(sysctl kern.boottime | awk '{print $5}' | tr -d ,) # produces EPOCH time
-formattedTime=$(date -jf %s "$boottime" +%F\ %T) #formats to a readable time
-updateScriptLog "Last Reboot: $formattedTime"
-
+formattedTime=$(date -jf %s "$boottime" +%F) #formats to a readable time
+last_reboot_formatted=$(date -j -f "%Y-%m-%d" "$formattedTime" +"%m/%d/%Y")
+updateScriptLog "Last Reboot: $last_reboot_formatted"
+today=$(date +%s)
+target_date=$(date -d "$last_reboot_formatted" +%s)
+	
+# Calculate the difference in days
+days_since_reboot=$(( (target_date - today) / 86400 ))
+if [[ $days_since_reboot < 14 ]]; then
+	last_reboot_icon="success"
+	updateScriptLog "Within the 14 day reboot threshold."
+else
+	last_reboot_icon="error"
+	updateScriptLog "Over the 14 day reboot threshold."
+fi
 ####### Total RAM
 hwmemsize=$(sysctl -n hw.memsize)
 ramsize=$(expr $hwmemsize / $((1024**3)))
@@ -194,7 +259,26 @@ updateScriptLog "Last macOS Update: $lastUpdateDate"
 
 ####### Filevault 2 Status
 fvstatus=$(fdesetup status)
+if [[ $fvstatus != "FileVault is On." ]]; then
+	fvstatus_icon="error"
+	updateScriptLog "FileVault error."
+else
+	fvstatus_icon="success"
+	updateScriptLog "FileVault is enabled."
+fi
 
+
+
+####### Crowdstrike Falcon Connection Status
+falcon_connect_status=$(sudo /Applications/Falcon.app/Contents/Resources/falconctl stats | grep "State:" | awk '{print $2}')
+updateScriptLog "Crowdstrike Falcon is $falcon_connect_status"
+if [[ $falcon_connect_status == "connected" ]]; then
+	falcon_connect_icon="success"
+	falcon_connect_status="Connected"
+else
+	falcon_connect_icon="error"
+	falcon_connect_status="Not Connected"
+fi
 #########################################################################################
 # Information List into a json file
 #########################################################################################
@@ -204,14 +288,15 @@ fvstatus=$(fdesetup status)
 	"listitem" : [
 		{"title" : "Current Network:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericNetworkIcon.icns", "statustext" : "$current_network"},
 		{"title" : "IP Address:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/AirDrop.icns", "statustext" : "$ipAddress"},
-		{"title" : "Free Disk Space:", "icon" : "https://ics.services.jamfcloud.com/icon/hash_522d1d726357cda2b122810601899663e468a065db3d66046778ceecb6e81c2b", "statustext" : "$available_storage"},
-		{"title" : "Storage SMART Status:", "icon" : "https://ics.services.jamfcloud.com/icon/hash_522d1d726357cda2b122810601899663e468a065db3d66046778ceecb6e81c2b", "statustext" : "$smartStatus"},
-		{"title" : "Last Jamf Checkin:", "icon" : "https://resources.jamf.com/images/logos/Jamf-Icon-color.png", "statustext" : "$last_check_in_time"},
-		{"title" : "Last Reboot:", "icon" : "https://use2.ics.services.jamfcloud.com/icon/hash_5d46c28310a0730f80d84afbfc5889bc4af8a590704bb9c41b87fc09679d3ebd", "statustext" : "$formattedTime"},
-		{"title" : "Last macOS Update:", "icon" : "https://use2.ics.services.jamfcloud.com/icon/hash_b8320cee6b2508e74092e3986ee434850c95ad79e698f91eff1facef89b09303", "statustext" : "$lastUpdateDate"},
-		{"title" : "Battery Condition:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/ToolbarInfo.icns", "statustext" : "$battery_condition"},
-		{"title" : "Battery Cycle Count:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/ToolbarInfo.icns", "statustext" : "$battery_cycle"},
-		{"title" : "Encryption Status:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/FileVaultIcon.icns", "statustext" : "$fvstatus"}
+		{"title" : "macOS Version:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/FinderIcon.icns", "status" : "${macOS_version_icon}", "statustext" : "$sw_vers"},
+		{"title" : "Free Disk Space:", "icon" : "https://ics.services.jamfcloud.com/icon/hash_522d1d726357cda2b122810601899663e468a065db3d66046778ceecb6e81c2b", "status" : "${storage_status_icon}","statustext" : "$available_storage"},
+		{"title" : "Storage SMART Status:", "icon" : "https://ics.services.jamfcloud.com/icon/hash_522d1d726357cda2b122810601899663e468a065db3d66046778ceecb6e81c2b", "status" : "${smart_status_icon}", "statustext" : "$smartStatus"},
+		{"title" : "Last Jamf Checkin:", "icon" : "https://resources.jamf.com/images/logos/Jamf-Icon-color.png",  "status" : "${jamf_checkin_icon}", "statustext" : "$last_check_in_time"},
+		{"title" : "Last Reboot:", "icon" : "https://use2.ics.services.jamfcloud.com/icon/hash_5d46c28310a0730f80d84afbfc5889bc4af8a590704bb9c41b87fc09679d3ebd", "status" : "${last_reboot_icon}", "statustext" : "$last_reboot_formatted"},
+		{"title" : "Battery Condition:","icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/ToolbarInfo.icns",  "status" : "${batteryStatusIcon}", "statustext" : "$battery_condition"},
+		{"title" : "Battery Cycle Count:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/ToolbarInfo.icns", "status" : "${battery_cycle_icon}", "statustext" : "$battery_cycle"},
+		{"title" : "Encryption Status:", "icon" : "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/FileVaultIcon.icns", "status" : "${fvstatus_icon}", "statustext" : "$fvstatus"},
+		{"title" : "Crowdstrike Falcon:", "icon" : "/Applications/Falcon.app/Contents/Resources/AppIcon.icns", "status" : "${falcon_connect_icon}", "statustext" : "$falcon_connect_status"}
 
 	]
 }
@@ -221,11 +306,11 @@ EOF
 # Display in Swift Dialog Box
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 	
-/usr/local/bin/dialog --message none --icon $logo --height 700 --title "Computer Health Check" --moveable --jsonfile /tmp/dialogjson.json --infobox "Current User: $loggedInUser\n \nComputer Model: $computerModel \n \n CPU: $cpu \n \n Useable Storage: $total_storage \n\nRAM: $ramsize GB\n \n macOS Version: $sw_vers \n\n Update Status: $updateStatus\n\n Computer Name: $computerName \n\nSerial Number: $serialNumber" --button1Text "Exit"
+/usr/local/bin/dialog --message none --progress 0 --progresstext "Select the help menu for results explanations." --icon $logo --height 700 --title "Computer Health Check" --moveable --jsonfile /tmp/dialogjson.json --infobox "Current User: $loggedInUser\n \nComputer Model: $computerModel \n \n CPU: $cpu \n \n Useable Storage: $total_storage \n\nRAM: $ramsize GB\n \n macOS Version: $sw_vers \n\n Update Status: $updateStatus\n\n Last macOS Update: $lastUpdateDate\n\n Computer Name: $computerName \n\nSerial Number: $serialNumber" --button1Text "Exit" --infobutton --infobuttontext "Get Help" --infobuttonaction "https://fanatics.service-now.com/fanatics" --helpmessage "Free Disk Space must be above 50GB available.\n\n SMART Status must return 'Verified'.\n\n Last Jamf Checkin must be within 7 days.\n\n Last Reboot must be within 14 days.\n\n Battery Condition must return 'Normal'.\n\n Battery Cycle Count must be below 1000. \n\n Encryption status must return 'Filevault is on'.\n\n Crowdstrike Falcon must be connected.\n\n macOS must be on version $macOSversion2 or $macOSversion1" 
 
 if [[ -f /tmp/dialogjson.json ]]; then
-	echo "json file found, deleting"
+	updateScriptLog "json file found, deleting"
 	rm /tmp/dialogjson.json
-	echo "removed json file"
+	updateScriptLog "removed json file"
 fi
 exit 0
