@@ -268,7 +268,7 @@ ramsize=$(expr $hwmemsize / $((1024**3)))
 updateScriptLog  "System Memory: ${ramsize} GB"
 
 ####### Current Network
-current_network=$(networksetup -getairportnetwork en0 | sed -E 's,^Current Wi-Fi Network: (.+)$,\1,')
+current_network=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d ':'";exit}')
 updateScriptLog "Current WiFi Network: $current_network"
 
 ####### CPU
