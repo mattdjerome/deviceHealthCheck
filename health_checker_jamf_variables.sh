@@ -8,17 +8,16 @@
 # Initially Built 05/22/2024
 # v0.0.1 - Initial Devleopment
 # v1.0.0 - 1st full production version
+# v1.1.0 - Updated to pull latest N and N-1 from macOS SOFA feed
 #################################
 
 scriptLog="${4:-"/var/log/health_checker.log"}" # Parameter 4: Script Log Location (i.e., Your organization's default location for client-side logs)
 logo="${5:-"/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/com.apple.macbookpro-16-space-gray.icns"}" # Parameter 5: logo Location
-macOSversion1="${6:-"14.5"}" # Parameter 6: minimum version for macOS N
-macOSversion2="${7:-"13.5.7"}" # Parameter 7: minimum version for macOS N-1
-minimumStorage="${8:-"50"}" # Parameter 8: minimum amount of storage available in gigabytes
-JamfCheckinDelta="${9:-"7"}" # Parameter 9: threshold days since last jamf checkin
-LastRebootDelta="${10:-"14"}" # Parameter 10: threshold days since last reboot
-batteryCycleCount="${11:-"1000"}" # parameter 11: battery cycle count threshold
-supportURL=""
+minimumStorage="${6:-"50"}" # Parameter 6: minimum amount of storage available in gigabytes
+JamfCheckinDelta="${7:-"7"}" # Parameter 7: threshold days since last jamf checkin
+LastRebootDelta="${8:-"14"}" # Parameter 8: threshold days since last reboot
+batteryCycleCount="${9:-"1000"}" # parameter 9: battery cycle count threshold
+supportURL="${10:-""}"
 #################################################################################################
 #
 # Pre-flight Checks
@@ -28,6 +27,7 @@ supportURL=""
 # Pre-flight Check: Client-side Logging
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
+
 if [[ ! -f "${scriptLog}" ]]; then
 	touch "${scriptLog}"
 fi
@@ -35,6 +35,24 @@ fi
 if [[ $logo == "" ]]; then
 	logo="/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/com.apple.macbookpro-14-2021-silver.icns"
 fi
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Pre-flight Check: Retrieve latest N and N-1 from macOS SOFA Feed
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+FEED_URL="https://sofafeed.macadmins.io/v1/macos_data_feed.json"
+
+# Fetch the JSON data from the feed
+json_data=$(curl -s $FEED_URL)
+
+# Check if the data was fetched successfully
+if [ -z "$json_data" ]; then
+	echo "Failed to fetch data from the feed."
+	exit 1
+fi
+latest_version=$(echo $json_data | jq -r '.OSVersions[]?.Latest.ProductVersion' | sort -V | tail -n 1)
+previous_version=$(echo $json_data | jq -r '.OSVersions[]?.Latest.ProductVersion' | sort -V | tail -n 2 | head -n 1)
+
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Pre-flight Check: Client-side Script Logging Function
@@ -174,7 +192,7 @@ fi
 ####### Get Current OS Version
 sw_vers=$(sw_vers | grep "ProductVersion" | awk '{print $2}')
 updateScriptLog "Current macOS Version: $sw_vers"
-if [ $sw_vers != $macOSversion1 ] && [ $sw_vers != $macOSversion2 ]; then
+if [ $sw_vers != $latest_version ] && [ $sw_vers != $previous_version ]; then
 	macOS_version_icon="error"
 else
 	macOS_version_icon="success"
@@ -314,7 +332,7 @@ EOF
 # Display in Swift Dialog Box
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 	
-/usr/local/bin/dialog --message none --progress 0 --progresstext "Select the ? menu on the right for results explanations." --icon $logo --height 800 --title "Computer Health Check" --moveable --jsonfile /tmp/dialogjson.json --infobox "Current User: $loggedInUser\n \nComputer Model: $computerModel \n \n CPU: $cpu \n \n Useable Storage: $total_storage \n\nRAM: $ramsize GB\n \n macOS Version: $sw_vers \n\n Update Status: $updateStatus\n\n Last macOS Update: $lastUpdateDate\n\n Computer Name: $computerName \n\nSerial Number: $serialNumber" --button1Text "Exit" --infobutton --infobuttontext "Get Help" --infobuttonaction "$supportURL" --helpmessage "Free Disk Space must be above 50GB available.\n\n SMART Status must return 'Verified'.\n\n Last Jamf Checkin must be within $JamfCheckinDelta days.\n\n Last Reboot must be within $LastRebootDelta days.\n\n Battery Condition must return 'Normal'.\n\n Battery Cycle Count must be below $batteryCycleCount. \n\n Encryption status must return 'Filevault is on'.\n\n Crowdstrike Falcon must be connected.\n\n macOS must be on version $macOSversion2 or $macOSversion1" 
+/usr/local/bin/dialog --message none --progress 0 --progresstext "Select the ? menu on the right for results explanations." --icon $logo --height 800 --title "Computer Health Check" --moveable --jsonfile /tmp/dialogjson.json --infobox "Current User: $loggedInUser\n \nComputer Model: $computerModel \n \n CPU: $cpu \n \n Useable Storage: $total_storage \n\nRAM: $ramsize GB\n \n macOS Version: $sw_vers \n\n Update Status: $updateStatus\n\n Last macOS Update: $lastUpdateDate\n\n Computer Name: $computerName \n\nSerial Number: $serialNumber" --button1Text "Exit" --infobutton --infobuttontext "Get Help" --infobuttonaction "$supportURL" --helpmessage "Free Disk Space must be above 50GB available.\n\n SMART Status must return 'Verified'.\n\n Last Jamf Checkin must be within $JamfCheckinDelta days.\n\n Last Reboot must be within $LastRebootDelta days.\n\n Battery Condition must return 'Normal'.\n\n Battery Cycle Count must be below $batteryCycleCount. \n\n Encryption status must return 'Filevault is on'.\n\n Crowdstrike Falcon must be connected.\n\n macOS must be on version $previous_version or $latest_version" 
 
 if [[ -f /tmp/dialogjson.json ]]; then
 	updateScriptLog "json file found, deleting"
