@@ -10,12 +10,12 @@
 # v0.0.1 - Initial Devleopment
 # v1.1.1 - bug fixes for last macOS update and current wifi network
 #################################
-scriptLog="${4:-"/var/log/health_checker.log"}" # Parameter 4: Script Log Location (i.e., Your organization's default location for client-side logs)
-logo="${5:-"/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/com.apple.macbookpro-16-space-gray.icns"}" # Parameter 5: logo Location
-minimumStorage="${6:-"50"}" # Parameter 8: minimum amount of stroage available in gigabytes
-JamfCheckinDelta="${7:-"7"}" # Parameter 9: threshold days since last jamf checkin
-LastRebootDelta="${8:-"14"}" # Parameter 10: threshold days since last reboot
-batteryCycleCount="${9:-"1000"}" # parameter 11: battery cycle count threshold
+scriptLog="${1:-"/var/log/health_checker.log"}" # Parameter 4: Script Log Location (i.e., Your organization's default location for client-side logs)
+logo="${2:-"/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/com.apple.macbookpro-16-space-gray.icns"}" # Parameter 5: logo Location
+minimumStorage="${3:-"50"}" # Parameter 8: minimum amount of stroage available in gigabytes
+JamfCheckinDelta="${4:-"7"}" # Parameter 9: threshold days since last jamf checkin
+LastRebootDelta="${5:-"14"}" # Parameter 10: threshold days since last reboot
+batteryCycleCount="${6:-"1000"}" # parameter 11: battery cycle count threshold
 
 #################################################################################################
 #
