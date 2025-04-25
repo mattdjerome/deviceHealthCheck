@@ -195,6 +195,7 @@ fi
 
 ####### Available Updates	
 # Run software update and store the result
+updateScriptLog  "Checking for available macOS updates."
 updates=$(softwareupdate -l 2>&1)
 
 # Check if any updates are available
@@ -294,7 +295,7 @@ fi
 
 
 ####### Crowdstrike Falcon Connection Status
-falcon_connect_status=$(sudo /Applications/Falcon.app/Contents/Resources/falconctl stats | grep "State:" | awk '{print $2}')
+falcon_connect_status=$(sudo /Applications/Falcon.app/Contents/Resources/falconctl stats | grep -i -A 1 "State:" | awk '{print $2}' | head -n 1)
 updateScriptLog "Crowdstrike Falcon is $falcon_connect_status"
 if [[ $falcon_connect_status == "connected" ]]; then
 	falcon_connect_icon="success"
