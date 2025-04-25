@@ -66,6 +66,10 @@ function currentLoggedInUser() {
 	updateScriptLog "PRE-FLIGHT CHECK: Current Logged-in User: ${loggedInUser}"
 }
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Pre-flight Check: Current macOS version
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+sw_vers=$(sw_vers | grep "ProductVersion:" | awk '{print $2}')
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # Pre-flight Check: Swift dialog
@@ -121,6 +125,25 @@ else
 	fi
 	sleep 3
 fi
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+# Pre-flight Check: Retrieve latest N and N-1 from macOS SOFA Feed
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+
+FEED_URL="https://sofafeed.macadmins.io/v1/macos_data_feed.json"
+
+# Fetch the JSON data from the feed
+json_data=$(curl -s $FEED_URL)
+
+# Check if the data was fetched successfully
+if [ -z "$json_data" ]; then
+	echo "Failed to fetch data from the feed."
+	exit 1
+fi
+latest_version=$(echo $json_data | jq -r '.OSVersions[]?.Latest.ProductVersion' | sort -V | tail -n 1)
+previous_version=$(echo $json_data | jq -r '.OSVersions[]?.Latest.ProductVersion' | sort -V | tail -n 2 | head -n 1)
+
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 # System Checks
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
@@ -170,28 +193,20 @@ else
 fi
 #
 #
-####### Get Current OS Version
-sw_vers=$(sw_vers | grep "ProductVersion" | awk '{print $2}')
-updateScriptLog "Current macOS Version: $sw_vers"
-if [ $sw_vers != $macOSversion1 ] && [ $sw_vers != $macOSversion2 ]; then
-	macOS_version_icon="error"
-else
-	macOS_version_icon="success"
-fi
 
 ####### Available Updates	
 # Run software update and store the result
-	updates=$(softwareupdate -l 2>&1)
+updates=$(softwareupdate -l 2>&1)
 
 # Check if any updates are available
-	if [[ $updates == *"No new software available"* ]]; then
-		updateStatus="No macOS Updates Available."
-		updateScriptLog  "No macOs updates available."
-	else
-		updateScriptLog "macOS Updates are available"
-		updateStatus="macOS Updates are available."
-		updateScriptLog "$updates"
-	fi
+if [[ $updates == *"No new software available"* ]]; then
+	updateStatus="No macOS Updates Available."
+	updateScriptLog  "No macOs updates available."
+else
+	updateScriptLog "macOS Updates are available"
+	updateStatus="macOS Updates are available."
+	updateScriptLog "$updates"
+fi
 
 ####### Storage usage
 	
@@ -259,7 +274,12 @@ computerModel=$(system_profiler SPHardwareDataType -detailLevel mini | grep "Mod
 updateScriptLog "Computer Model: $computerModel"
 
 ####### Last macOS Update
-lastUpdateDate=$(system_profiler SPInstallHistoryDataType | grep "macOS" -C 4 | sed -n 7p | awk '{print substr($3, 1, length($3)-1)}')
+sw_vers=$(sw_vers | grep 'ProductVersion:' | awk '{print $2}')
+lastUpdateDate=$(system_profiler SPInstallHistoryDataType | \
+grep -i -A 4 "macOS $sw_vers:" | \
+grep "Install Date" | \
+sed 's/^.*Install Date: \([0-9/]*\),.*$/\1/')
+
 updateScriptLog "Last macOS Update: $lastUpdateDate"
 
 ####### Filevault 2 Status
@@ -311,7 +331,7 @@ EOF
 # Display in Swift Dialog Box
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 	
-/usr/local/bin/dialog --message none --progress 0 --progresstext "Select the help menu for results explanations." --icon $logo --height 800 --title "Computer Health Check" --moveable --jsonfile /tmp/dialogjson.json --infobox "Current User: $loggedInUser\n \nComputer Model: $computerModel \n \n CPU: $cpu \n \n Useable Storage: $total_storage \n\nRAM: $ramsize GB\n \n macOS Version: $sw_vers \n\n Update Status: $updateStatus\n\n Last macOS Update: $lastUpdateDate\n\n Computer Name: $computerName \n\nSerial Number: $serialNumber" --button1Text "Exit" --infobutton --infobuttontext "Get Help" --infobuttonaction "https://fanatics.service-now.com/fanatics" --helpmessage "Free Disk Space must be above 50GB available.\n\n SMART Status must return 'Verified'.\n\n Last Jamf Checkin must be within 7 days.\n\n Last Reboot must be within 14 days.\n\n Battery Condition must return 'Normal'.\n\n Battery Cycle Count must be below 1000. \n\n Encryption status must return 'Filevault is on'.\n\n Crowdstrike Falcon must be connected.\n\n macOS must be on version $macOSversion2 or $macOSversion1" 
+/usr/local/bin/dialog --message none --ontop --progress 0 --progresstext "Select the help menu for results explanations." --icon $logo --height 800 --title "Computer Health Check" --moveable --jsonfile /tmp/dialogjson.json --infobox "Current User: $loggedInUser\n \nComputer Model: $computerModel \n \n CPU: $cpu \n \n Useable Storage: $total_storage \n\nRAM: $ramsize GB\n \n macOS Version: $sw_vers \n\n Update Status: $updateStatus\n\n Last macOS Update: $lastUpdateDate\n\n Computer Name: $computerName \n\nSerial Number: $serialNumber" --button1Text "Exit" --infobutton --infobuttontext "Get Help" --infobuttonaction "https://fanatics.service-now.com/fanatics" --helpmessage "Free Disk Space must be above 50GB available.\n\n SMART Status must return 'Verified'.\n\n Last Jamf Checkin must be within 7 days.\n\n Last Reboot must be within 14 days.\n\n Battery Condition must return 'Normal'.\n\n Battery Cycle Count must be below 1000. \n\n Encryption status must return 'Filevault is on'.\n\n Crowdstrike Falcon must be connected.\n\n macOS must be on version $previous_version or $latest_version" 
 
 if [[ -f /tmp/dialogjson.json ]]; then
 	updateScriptLog "json file found, deleting"
