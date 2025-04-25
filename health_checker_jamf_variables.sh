@@ -9,6 +9,7 @@
 # v0.0.1 - Initial Devleopment
 # v1.0.0 - 1st full production version
 # v1.1.0 - Updated to pull latest N and N-1 from macOS SOFA feed
+# v1.1.1 - bug fixes for last macOS update and current wifi network
 #################################
 
 scriptLog="${4:-"/var/log/health_checker.log"}" # Parameter 4: Script Log Location (i.e., Your organization's default location for client-side logs)
@@ -268,7 +269,7 @@ ramsize=$(expr $hwmemsize / $((1024**3)))
 updateScriptLog  "System Memory: ${ramsize} GB"
 
 ####### Current Network
-current_network=$(system_profiler SPAirPortDataType | awk '/Current Network/ {getline;$1=$1;print $0 | "tr -d ':'";exit}')
+current_network=$( ipconfig getsummary $(networksetup -listallhardwareports | awk '/Hardware Port: Wi-Fi/{getline; print $2}') | awk -F ' SSID : '  '/ SSID : / {print $2}' )
 updateScriptLog "Current WiFi Network: $current_network"
 
 ####### CPU
