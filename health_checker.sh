@@ -8,15 +8,14 @@
 # By Matt Jerome
 # Initiall Built 05/22/2024
 # v0.0.1 - Initial Devleopment
+# v1.1.1 - bug fixes for last macOS update and current wifi network
 #################################
 scriptLog="${4:-"/var/log/health_checker.log"}" # Parameter 4: Script Log Location (i.e., Your organization's default location for client-side logs)
 logo="${5:-"/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/com.apple.macbookpro-16-space-gray.icns"}" # Parameter 5: logo Location
-macOSversion1="${6:-"14.5"}" # Parameter 6: minimum version for macOS N
-macOSversion2="${7:-"13.5.7"}" # Parameter 7: minimum version for macOS N-1
-minimumStorage="${8:-"50"}" # Parameter 8: minimum amount of stroage available in gigabytes
-JamfCheckinDelta="${9:-"7"}" # Parameter 9: threshold days since last jamf checkin
-LastRebootDelta="${10:-"14"}" # Parameter 10: threshold days since last reboot
-batteryCycleCount="${11:-"1000"}" # parameter 11: battery cycle count threshold
+minimumStorage="${6:-"50"}" # Parameter 8: minimum amount of stroage available in gigabytes
+JamfCheckinDelta="${7:-"7"}" # Parameter 9: threshold days since last jamf checkin
+LastRebootDelta="${8:-"14"}" # Parameter 10: threshold days since last reboot
+batteryCycleCount="${9:-"1000"}" # parameter 11: battery cycle count threshold
 
 #################################################################################################
 #
@@ -262,7 +261,7 @@ ramsize=$(expr $hwmemsize / $((1024**3)))
 updateScriptLog  "System Memory: ${ramsize} GB"
 
 ####### Current Network
-current_network=$(networksetup -getairportnetwork en0 | sed -E 's,^Current Wi-Fi Network: (.+)$,\1,')
+current_network=$( ipconfig getsummary $(networksetup -listallhardwareports | awk '/Hardware Port: Wi-Fi/{getline; print $2}') | awk -F ' SSID : '  '/ SSID : / {print $2}' )
 updateScriptLog "Current WiFi Network: $current_network"
 
 ####### CPU
