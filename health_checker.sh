@@ -274,13 +274,12 @@ computerModel=$(system_profiler SPHardwareDataType -detailLevel mini | grep "Mod
 updateScriptLog "Computer Model: $computerModel"
 
 ####### Last macOS Update
-sw_vers=$(sw_vers | grep 'ProductVersion:' | awk '{print $2}')
-lastUpdateDate=$(system_profiler SPInstallHistoryDataType | \
-grep -i -A 4 "macOS $sw_vers:" | \
-grep "Install Date" | \
-sed 's/^.*Install Date: \([0-9/]*\),.*$/\1/')
-
-updateScriptLog "Last macOS Update: $lastUpdateDate"
+sw_vers=$(sw_vers -productVersion)
+lastUpdateDate=$(system_profiler SPInstallHistoryDataType \
+	| grep -i -A 4 "macOS $sw_vers" \
+	| grep "Install Date" \
+	| sed 's/^.*Install Date: \([0-9/]*\),.*$/\1/' \
+	| tr -d '\n')
 
 ####### Filevault 2 Status
 fvstatus=$(fdesetup status)
